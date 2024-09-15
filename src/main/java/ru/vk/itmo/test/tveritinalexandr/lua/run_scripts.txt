@@ -1,0 +1,15 @@
+Wrk2:
+    GET:
+        ./wrk -d 25 -t 1 -c 1 -R 2300 -L -s /Users/tveritinaleksandr/IdeaProjects/2024-highload-dht/src/main/java/ru/vk/itmo/test/tveritinalexandr/lua/get_request.lua http://localhost:8080
+
+    PUT:
+        ./wrk -d 25 -t 1 -c 1 -R 30500 -L -s /Users/tveritinaleksandr/IdeaProjects/2024-highload-dht/src/main/java/ru/vk/itmo/test/tveritinalexandr/lua/put_rquest.lua http://localhost:8080
+
+Async Profiler:
+    GET:
+        ./asprof -e cpu -d 20 -f ./profile_get_cpu.html MainServer
+        ./asprof -e alloc -d 20 -f ./profile_get_alloc.html MainServer
+
+    PUT:
+        ./asprof -e cpu -d 20 -f ./profile_put_cpu.html MainServer
+        ./asprof -e alloc -d 20 -f ./profile_put_alloc.html MainServer

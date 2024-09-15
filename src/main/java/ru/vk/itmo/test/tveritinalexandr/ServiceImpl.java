@@ -15,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 public class ServiceImpl implements Service {
     private ServerImpl httpServer;
     private final ServiceConfig serviceConfig;
+    private static final long FLUSHING_THRESHOLD_BYTES = 1024 * 512;
 
     public ServiceImpl(ServiceConfig serviceConfig) throws IOException {
         this.serviceConfig = serviceConfig;
@@ -52,7 +53,7 @@ public class ServiceImpl implements Service {
     private ServerImpl createServerInstance() throws IOException {
         return new ServerImpl(
                 adaptConfig(serviceConfig),
-                new DaoImpl(new Config(serviceConfig.workingDir(), 10 * 1024 * 1024))
+                new DaoImpl(new Config(serviceConfig.workingDir(), FLUSHING_THRESHOLD_BYTES))
         );
     }
 
