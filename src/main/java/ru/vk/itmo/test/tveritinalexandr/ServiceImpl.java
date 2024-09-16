@@ -1,8 +1,6 @@
 package ru.vk.itmo.test.tveritinalexandr;
 
 import one.nio.async.CustomThreadFactory;
-import one.nio.http.HttpServerConfig;
-import one.nio.server.AcceptorConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.vk.itmo.Service;
@@ -12,7 +10,6 @@ import ru.vk.itmo.dao.Dao;
 import ru.vk.itmo.dao.Entry;
 import ru.vk.itmo.test.ServiceFactory;
 import ru.vk.itmo.test.tveritinalexandr.dao.DaoImpl;
-import ru.vk.itmo.test.viktorkorotkikh.LSMServerImpl;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -22,33 +19,23 @@ import java.util.concurrent.*;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class ServiceImpl implements Service {
-//    private static final Logger log = LoggerFactory.getLogger(ServiceImpl.class);
+    private static final Logger log = LoggerFactory.getLogger(ServiceImpl.class);
     private static final long FLUSHING_THRESHOLD_BYTES = 1024 * 512;
-    private static final int THREADS = Runtime.getRuntime().availableProcessors();
+    private static final int THREADS = Runtime.getRuntime().availableProcessors() * 2;
     private static final int QUEUE_SIZE = 1024;
     private final ServiceConfig serviceConfig;
     private Dao<MemorySegment, Entry<MemorySegment>> dao;
     private ServerImpl httpServer;
     private ExecutorService executor;
 
+    private boolean isStopped = false;
+
     public ServiceImpl(ServiceConfig serviceConfig) throws IOException {
         this.serviceConfig = serviceConfig;
     }
 
-    private static HttpServerConfig adaptConfig(ServiceConfig serviceConfig) {
-        HttpServerConfig httpServerConfig = new HttpServerConfig();
-        AcceptorConfig acceptorConfig = new AcceptorConfig();
-        acceptorConfig.reusePort = true;
-        acceptorConfig.port = serviceConfig.selfPort();
-
-        httpServerConfig.acceptors = new AcceptorConfig[]{acceptorConfig};
-        httpServerConfig.closeSessions = true;
-
-        return httpServerConfig;
-    }
-
     @Override
-    public CompletableFuture<Void> start() {
+    public synchronized CompletableFuture<Void> start() {
         try {
             executor = new ThreadPoolExecutor(
                     THREADS,
@@ -63,20 +50,31 @@ public class ServiceImpl implements Service {
             throw new UncheckedIOException(e);
         }
         httpServer.start();
+        isStopped = false;
         return CompletableFuture.completedFuture(null);
     }
 
     @Override
-    public CompletableFuture<Void> stop() throws IOException {
-        httpServer.stop();
-        shutDownAndAwaitTermination(executor);
-        dao.close();
+    public synchronized CompletableFuture<Void> stop() throws IOException {
+        if (isStopped) {
+            return CompletableFuture.completedFuture(null);
+        }
+        try {
+            httpServer.stop();
+            shutDownAndAwaitTermination(executor);
+        } finally {
+            dao.close();
+        }
+
+        isStopped = true;
+        log.info("Node is stopped");
+
         return CompletableFuture.completedFuture(null);
     }
 
     private ServerImpl createServerInstance() throws IOException {
         dao = new DaoImpl(new Config(serviceConfig.workingDir(), FLUSHING_THRESHOLD_BYTES));
-        return new ServerImpl(adaptConfig(serviceConfig), dao, executor);
+        return new ServerImpl(serviceConfig, dao, executor);
     }
 
     private static void shutDownAndAwaitTermination(ExecutorService executor) {
@@ -94,7 +92,7 @@ public class ServiceImpl implements Service {
         }
     }
 
-    @ServiceFactory(stage = 2)
+    @ServiceFactory(stage = 3)
     public static class FactoryImpl implements ServiceFactory.Factory {
 
         @Override
@@ -106,5 +104,4 @@ public class ServiceImpl implements Service {
             }
         }
     }
-
 }
