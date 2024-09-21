@@ -7,22 +7,22 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
- * Filters non tombstone {@link Entry}s.
+ * Filters non tombstone {@link EntryWithTime}s.
  *
  * @author incubos
  */
-final class LiveFilteringIterator implements Iterator<Entry<MemorySegment>> {
-    private final Iterator<Entry<MemorySegment>> delegate;
-    private Entry<MemorySegment> next;
+final class LiveFilteringIterator implements Iterator<EntryWithTime<MemorySegment>> {
+    private final Iterator<EntryWithTime<MemorySegment>> delegate;
+    private EntryWithTime<MemorySegment> next;
 
-    LiveFilteringIterator(final Iterator<Entry<MemorySegment>> delegate) {
+    LiveFilteringIterator(final Iterator<EntryWithTime<MemorySegment>> delegate) {
         this.delegate = delegate;
         skipTombstones();
     }
 
     private void skipTombstones() {
         while (delegate.hasNext()) {
-            final Entry<MemorySegment> entry = delegate.next();
+            final EntryWithTime<MemorySegment> entry = delegate.next();
             if (entry.value() != null) {
                 this.next = entry;
                 break;
@@ -36,13 +36,13 @@ final class LiveFilteringIterator implements Iterator<Entry<MemorySegment>> {
     }
 
     @Override
-    public Entry<MemorySegment> next() {
+    public EntryWithTime<MemorySegment> next() {
         if (!hasNext()) {
             throw new NoSuchElementException();
         }
 
         // Consume
-        final Entry<MemorySegment> result = next;
+        final EntryWithTime<MemorySegment> result = next;
         next = null;
 
         skipTombstones();

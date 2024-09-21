@@ -7,9 +7,9 @@ import ru.vk.itmo.Service;
 import ru.vk.itmo.ServiceConfig;
 import ru.vk.itmo.dao.Config;
 import ru.vk.itmo.dao.Dao;
-import ru.vk.itmo.dao.Entry;
 import ru.vk.itmo.test.ServiceFactory;
 import ru.vk.itmo.test.tveritinalexandr.dao.DaoImpl;
+import ru.vk.itmo.test.tveritinalexandr.dao.EntryWithTime;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -24,9 +24,10 @@ public class ServiceImpl implements Service {
     private static final int THREADS = Runtime.getRuntime().availableProcessors() * 2;
     private static final int QUEUE_SIZE = 1024;
     private final ServiceConfig serviceConfig;
-    private Dao<MemorySegment, Entry<MemorySegment>> dao;
+    private Dao<MemorySegment, EntryWithTime<MemorySegment>> dao;
     private ServerImpl httpServer;
-    private ExecutorService executor;
+    private ExecutorService executorLocal;
+    private ExecutorService executorRemote;
 
     private boolean isStopped = false;
 
@@ -37,14 +38,25 @@ public class ServiceImpl implements Service {
     @Override
     public synchronized CompletableFuture<Void> start() {
         try {
-            executor = new ThreadPoolExecutor(
+            executorLocal = new ThreadPoolExecutor(
                     THREADS,
                     THREADS,
                     1000,
                     SECONDS,
                     new ArrayBlockingQueue<>(QUEUE_SIZE),
                     new CustomThreadFactory("worker", true),
-                    new ThreadPoolExecutor.AbortPolicy());
+                    new ThreadPoolExecutor.AbortPolicy()
+            );
+
+            executorRemote = new ThreadPoolExecutor(
+                    THREADS,
+                    THREADS,
+                    1000,
+                    SECONDS,
+                    new ArrayBlockingQueue<>(QUEUE_SIZE),
+                    new CustomThreadFactory("worker", true),
+                    new ThreadPoolExecutor.AbortPolicy()
+            );
             httpServer = createServerInstance();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -61,7 +73,8 @@ public class ServiceImpl implements Service {
         }
         try {
             httpServer.stop();
-            shutDownAndAwaitTermination(executor);
+            shutDownAndAwaitTermination(executorLocal);
+            shutDownAndAwaitTermination(executorRemote);
         } finally {
             dao.close();
         }
@@ -74,7 +87,7 @@ public class ServiceImpl implements Service {
 
     private ServerImpl createServerInstance() throws IOException {
         dao = new DaoImpl(new Config(serviceConfig.workingDir(), FLUSHING_THRESHOLD_BYTES));
-        return new ServerImpl(serviceConfig, dao, executor);
+        return new ServerImpl(serviceConfig, dao, executorLocal, executorRemote);
     }
 
     private static void shutDownAndAwaitTermination(ExecutorService executor) {
@@ -92,7 +105,7 @@ public class ServiceImpl implements Service {
         }
     }
 
-    @ServiceFactory(stage = 3)
+    @ServiceFactory(stage = 4)
     public static class FactoryImpl implements ServiceFactory.Factory {
 
         @Override

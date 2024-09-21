@@ -15,7 +15,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Iterator;
 
 /**
- * Writes {@link Entry} {@link Iterator} to SSTable on disk.
+ * Writes {@link EntryWithTime} {@link Iterator} to SSTable on disk.
  *
  * <p>Index file {@code <N>.index} contains {@code long} offsets to entries in data file:
  * {@code [offset0, offset1, ...]}
@@ -40,7 +40,7 @@ final class SSTableWriter {
     void write(
             final Path baseDir,
             final int sequence,
-            final Iterator<Entry<MemorySegment>> entries) throws IOException {
+            final Iterator<EntryWithTime<MemorySegment>> entries) throws IOException {
         // Write to temporary files
         final Path tempIndexName = SSTables.tempIndexName(baseDir, sequence);
         final Path tempDataName = SSTables.tempDataName(baseDir, sequence);
@@ -71,7 +71,7 @@ final class SSTableWriter {
                 writeLong(entryOffset, index);
 
                 // Then write the entry
-                final Entry<MemorySegment> entry = entries.next();
+                final EntryWithTime<MemorySegment> entry = entries.next();
                 entryOffset += writeEntry(entry, data);
             }
         }
@@ -127,14 +127,15 @@ final class SSTableWriter {
     }
 
     /**
-     * Writes {@link Entry} to {@link FileChannel}.
+     * Writes {@link EntryWithTime} to {@link FileChannel}.
      *
      * @return written bytes
      */
     private long writeEntry(
-            final Entry<MemorySegment> entry,
+            final EntryWithTime<MemorySegment> entry,
             final OutputStream os) throws IOException {
         final MemorySegment key = entry.key();
+        final long timeStamp = entry.timeStamp();
         final MemorySegment value = entry.value();
         long result = 0L;
 
@@ -145,6 +146,10 @@ final class SSTableWriter {
         // Key
         writeSegment(key, os);
         result += key.byteSize();
+
+        // timeStamp
+        writeLong(timeStamp, os);
+        result += Long.BYTES;
 
         // Value size and possibly value
         if (value == null) {
